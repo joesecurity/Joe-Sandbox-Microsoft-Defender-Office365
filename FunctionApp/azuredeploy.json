@@ -204,7 +204,7 @@
     },
     "FunctionPackageUri": {
       "type": "string",
-      "defaultValue": "https://github.com/joesecurity/Joesandbox-Microsoft-Defender-Office365/raw/refs/heads/main/FunctionApp/released-package.zip",
+      "defaultValue": "https://github.com/joesecurity/Joe-Sandbox-Microsoft-Defender-Office365/raw/refs/heads/main/FunctionApp/released-package.zip",
       "metadata": {
         "description": "Public HTTPS URI of the Function App deployment ZIP."
       }

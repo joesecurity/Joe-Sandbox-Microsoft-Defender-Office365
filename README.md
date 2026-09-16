@@ -57,13 +57,13 @@ Choose the hosting plan that fits your Azure environment.
 
 ### Flex Consumption
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoesecurity%2FJoesandbox-Microsoft-Defender-Office365%2Frefs%2Fheads%2Fmain%2FFunctionApp%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoesecurity%2FJoe-Sandbox-Microsoft-Defender-Office365%2Frefs%2Fheads%2Fmain%2FFunctionApp%2Fazuredeploy.json)
 
 Flex Consumption is recommended when it is available in the resource group's region. See the current [supported regions](https://learn.microsoft.com/en-us/azure/azure-functions/flex-consumption-plan#view-currently-supported-regions).
 
 ### Elastic Premium
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoesecurity%2FJoesandbox-Microsoft-Defender-Office365%2Frefs%2Fheads%2Fmain%2FFunctionApp%2Fazuredeploy_premium.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoesecurity%2FJoe-Sandbox-Microsoft-Defender-Office365%2Frefs%2Fheads%2Fmain%2FFunctionApp%2Fazuredeploy_premium.json)
 
 Use the Premium template when Flex Consumption is unavailable or an Elastic Premium plan is required.
 

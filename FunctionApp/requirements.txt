@@ -1,0 +1,4 @@
+azure-functions
+azure-storage-blob
+jbxapi>=3.24.0,<4
+requests

@@ -1,6 +1,9 @@
 """Environment-backed connector configuration."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+import logging
 from os import environ
 
 
@@ -11,6 +14,14 @@ DEFENDER_INDICATOR_ACTIONS = {
     "BlockAndRemediate",
     "Warn",
 }
+ALERT_SEVERITIES = {"unknown", "informational", "low", "medium", "high"}
+INDICATOR_VERDICTS = {"malicious", "suspicious"}
+REQUIRED_SETTINGS = (
+    "JoeSandboxAPIKey",
+    "AzureTenantID",
+    "AzureClientID",
+    "AzureClientSecret",
+)
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -23,7 +34,45 @@ def env_bool(name: str, default: bool) -> bool:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
-    raise ValueError(f"{name} must be a boolean value")
+    raise ValueError(f"{name} must be a boolean value, got {raw!r}")
+
+
+def env_int(
+    name: str, default: int, minimum: int, maximum: int | None = None
+) -> int:
+    """Parse a bounded integer environment variable, naming it on error."""
+    raw = environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from None
+    if value < minimum or (maximum is not None and value > maximum):
+        upper = f" and at most {maximum}" if maximum is not None else ""
+        raise ValueError(f"{name} must be at least {minimum}{upper}, got {value}")
+    return value
+
+
+def env_list(name: str, default: str, allowed: set[str]) -> tuple[str, ...]:
+    """Parse a comma-separated, lower-cased list restricted to known values."""
+    values = tuple(
+        item.strip().lower()
+        for item in environ.get(name, default).split(",")
+        if item.strip()
+    )
+    invalid = sorted(set(values) - allowed)
+    if invalid:
+        raise ValueError(
+            f"{name} contains unsupported value(s) {', '.join(invalid)}; "
+            f"allowed: {', '.join(sorted(allowed))}"
+        )
+    return values
+
+
+def missing_required_settings() -> list[str]:
+    """Return the names of required credentials that are not configured."""
+    return [name for name in REQUIRED_SETTINGS if not environ.get(name, "").strip()]
 
 
 @dataclass(frozen=True)
@@ -70,22 +119,22 @@ class DefenderConfig:
     user_agent: str = "JoeSandbox-MS-Defender-Office365"
 
     def __post_init__(self) -> None:
-        actions = (
-            self.malicious_network_action,
-            self.suspicious_network_action,
-            self.malicious_file_action,
-            self.suspicious_file_action,
-        )
+        actions = {
+            "MaliciousNetworkAction": self.malicious_network_action,
+            "SuspiciousNetworkAction": self.suspicious_network_action,
+            "MaliciousFileAction": self.malicious_file_action,
+            "SuspiciousFileAction": self.suspicious_file_action,
+        }
         invalid = [
-            action for action in actions if action not in DEFENDER_INDICATOR_ACTIONS
+            name
+            for name, action in actions.items()
+            if action not in DEFENDER_INDICATOR_ACTIONS
         ]
         if invalid:
             raise ValueError(
-                "Defender indicator actions must be one of: "
+                f"{', '.join(invalid)} must be one of: "
                 + ", ".join(sorted(DEFENDER_INDICATOR_ACTIONS))
             )
-        if self.indicator_expiration_days < 1:
-            raise ValueError("IndicatorLifetimeDays must be at least 1")
 
     @property
     def auth_url(self) -> str:
@@ -95,6 +144,18 @@ class DefenderConfig:
         )
 
 
+@dataclass(frozen=True)
+class StateConfig:
+    failed_alert_max_attempts: int
+    pending_submission_ttl_hours: int
+
+
+if environ.get("JoeSandboxAPIRetryTimeout", "").strip():
+    logging.getLogger(__name__).warning(
+        "JoeSandboxAPIRetryTimeout is deprecated and ignored; use "
+        "JoeSandboxAPIRequestTimeoutSeconds (per-request timeout in seconds)"
+    )
+
 JOE_CONFIG = JoeSandboxConfig(
     api_key=environ.get("JoeSandboxAPIKey", ""),
     base_url=environ.get(
@@ -103,12 +164,12 @@ JOE_CONFIG = JoeSandboxConfig(
     accept_terms=env_bool("JoeSandboxAcceptTerms", False),
     resubmit=env_bool("JoeSandboxResubmit", False),
     analysis_job_timeout_seconds=(
-        int(environ.get("JoeSandboxAnalysisJobTimeout", "30")) * 60
+        env_int("JoeSandboxAnalysisJobTimeout", 30, 1, 1440) * 60
     ),
-    poll_interval_seconds=int(environ.get("JoeSandboxPollIntervalSeconds", "30")),
-    api_retries=int(environ.get("JoeSandboxAPIMaxRetry", "5")),
-    api_timeout_seconds=(
-        int(environ.get("JoeSandboxAPIRetryTimeout", "5")) * 60
+    poll_interval_seconds=env_int("JoeSandboxPollIntervalSeconds", 30, 5, 3600),
+    api_retries=env_int("JoeSandboxAPIMaxRetry", 5, 1, 10),
+    api_timeout_seconds=env_int(
+        "JoeSandboxAPIRequestTimeoutSeconds", 60, 5, 600
     ),
 )
 
@@ -116,33 +177,21 @@ DEFENDER_CONFIG = DefenderConfig(
     tenant_id=environ.get("AzureTenantID", ""),
     application_id=environ.get("AzureClientID", ""),
     application_secret=environ.get("AzureClientSecret", ""),
-    severities=tuple(
-        severity.strip().lower()
-        for severity in environ.get(
-            "AlertSeverities", "informational,low,medium,high"
-        ).split(",")
-        if severity.strip()
+    severities=env_list(
+        "AlertSeverities", "informational,low,medium,high", ALERT_SEVERITIES
     ),
     add_tags_to_incident=env_bool("IncidentTagsEnabled", True),
-    add_comments_to_incident=env_bool("IncidentCommentsEnabled", False),
-    retry_count=int(environ.get("MicrosoftRetryCount", "3")),
-    retry_delay_seconds=int(
-        environ.get("MicrosoftRetryDelaySeconds", "60")
-    ),
-    http_timeout_seconds=int(environ.get("MicrosoftHttpTimeoutSeconds", "120")),
-    initial_lookback_minutes=int(environ.get("InitialLookbackMinutes", "60")),
-    overlap_minutes=int(environ.get("AlertOverlapMinutes", "15")),
+    add_comments_to_incident=env_bool("IncidentCommentsEnabled", True),
+    retry_count=env_int("MicrosoftRetryCount", 3, 0, 10),
+    retry_delay_seconds=env_int("MicrosoftRetryDelaySeconds", 60, 1, 600),
+    http_timeout_seconds=env_int("MicrosoftHttpTimeoutSeconds", 120, 5, 600),
+    initial_lookback_minutes=env_int("InitialLookbackMinutes", 60, 1, 43200),
+    overlap_minutes=env_int("AlertOverlapMinutes", 15, 0, 1440),
     create_indicators=env_bool("IndicatorImportEnabled", True),
-    indicator_verdicts=tuple(
-        verdict.strip().lower()
-        for verdict in environ.get(
-            "IndicatorVerdicts", "malicious,suspicious"
-        ).split(",")
-        if verdict.strip()
+    indicator_verdicts=env_list(
+        "IndicatorVerdicts", "malicious,suspicious", INDICATOR_VERDICTS
     ),
-    indicator_expiration_days=int(
-        environ.get("IndicatorLifetimeDays", "30")
-    ),
+    indicator_expiration_days=env_int("IndicatorLifetimeDays", 30, 1, 3650),
     malicious_network_action=environ.get(
         "MaliciousNetworkAction", "Block"
     ),
@@ -158,6 +207,29 @@ DEFENDER_CONFIG = DefenderConfig(
     indicator_generate_alert=env_bool("IndicatorAlertsEnabled", False),
 )
 
-RETRY_STATUS_CODES = {429, 500, 501, 502, 503, 504}
+STATE_CONFIG = StateConfig(
+    failed_alert_max_attempts=env_int("FailedAlertMaxAttempts", 2, 1, 20),
+    pending_submission_ttl_hours=env_int("PendingSubmissionTTLHours", 24, 1, 720),
+)
+
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+# Statuses that are safe to retry for non-idempotent requests (POST): the
+# server rejected the request before processing it.
+SAFE_POST_RETRY_STATUS_CODES = {429, 503}
+MAX_RETRY_AFTER_SECONDS = 120
+TOKEN_REFRESH_MARGIN_SECONDS = 300
+# Graph applies incident PATCHes asynchronously; two PATCHes to the same
+# incident a second apart were observed to be applied out of order (the
+# older tag list won). Space them out within a cycle.
+INCIDENT_PATCH_SPACING_SECONDS = 15
+# How long handled emails are remembered (state "final_messages") so alerts
+# re-fetched by the overlap window or by our own comments are skipped
+# without downloading the email again.
+FINAL_MESSAGE_RETENTION_HOURS = 72
+ALERT_PAGE_SIZE = 100
+INDICATOR_PAGE_SIZE = 10000
+FUNCTION_TIME_SAFETY_MARGIN_SECONDS = 300
+DEFAULT_FUNCTION_TIMEOUT_SECONDS = 30 * 60
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2, "informational": 3}
 ANALYZED_MESSAGE_EVIDENCE = "#microsoft.graph.security.analyzedMessageEvidence"
+

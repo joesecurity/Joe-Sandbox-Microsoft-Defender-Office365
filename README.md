@@ -74,14 +74,16 @@ Use the Premium template when Flex Consumption is unavailable or an Elastic Prem
 | **Subscription** | Azure subscription used for the Function App |
 | **Resource group** | Resource group where the connector is deployed |
 | **Region** | Azure region for the deployment |
-| **Function Name** | Function App base name; default is `JoeSandboxDefenderO365` |
+| **Function Name** | Function App base name; default is `JoeDefenderO365`; a 3-character suffix is appended |
 | **Azure Tenant ID** | Directory/tenant ID from the Entra application |
 | **Azure Client ID** | Application/client ID from the Entra application |
 | **Azure Client Secret** | Client-secret value created earlier |
 | **App Insights Workspace Resource ID** | Full resource ID of the Log Analytics workspace |
 | **Joe Sandbox Base URL** | Joe Sandbox URL without `/api`; cloud default is `https://jbxcloud.joesecurity.org` |
 | **Joe Sandbox API Key** | API key with submission and analysis-read permissions |
-| **Joe Sandbox Accept Terms** | Set to `true` only after accepting the applicable Joe Sandbox terms |
+| **Joe Sandbox Accept Terms** | Defaults to `true`; leave it enabled only if you accept the applicable Joe Sandbox terms. Joe Sandbox Cloud rejects submissions when it is `false` |
+
+The remaining fields are optional and described in [Optional configuration](#optional-configuration).
 
 Select **Review + create**, verify the settings, and start the deployment.
 
@@ -101,36 +103,50 @@ The first run checks the previous 60 minutes by default. Increase `InitialLookba
 
 ## Optional configuration
 
-Use the setting names below when deploying or updating the connector. Existing
-deployments using the earlier names must rename those application settings or
-redeploy with the updated template and package; legacy names are not read.
+Every setting below is shown as a field in both deployment templates and is
+stored as an application setting of the same name, so it can also be changed
+later under **Function App** → **Settings** → **Environment variables**.
+Integer values outside the listed range stop the function from starting.
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `PollIntervalMinutes` | `5` | Polling interval accepted by the ARM templates: 1–10 minutes |
-| `InitialLookbackMinutes` | `60` | Alert history checked on the first run |
-| `AlertOverlapMinutes` | `15` | Overlap applied to the saved polling watermark |
-| `AlertSeverities` | `informational,low,medium,high` | Comma-separated alert severities to process |
-| `IncidentTagsEnabled` | `true` | Add verdict and threat-name tags to related incidents |
-| `IncidentCommentsEnabled` | `false` | Add the analysis result to related incidents with comment deduplication |
-| `IndicatorImportEnabled` | `true` | Create Defender indicators from malicious Joe Sandbox IOCs |
-| `IndicatorVerdicts` | `malicious,suspicious` | Analysis verdicts eligible for indicator creation |
-| `IndicatorLifetimeDays` | `30` | Number of days before created indicators expire |
-| `MaliciousNetworkAction` | `Block` | Action for URL, domain, and IP indicators from malicious analyses |
-| `SuspiciousNetworkAction` | `Audit` | Action for URL, domain, and IP indicators from suspicious analyses |
-| `MaliciousFileAction` | `Block` | Action for file-hash indicators from malicious analyses |
-| `SuspiciousFileAction` | `Audit` | Action for file-hash indicators from suspicious analyses |
-| `IndicatorAlertsEnabled` | `false` | Generate matching alerts; automatically treated as `true` for `Audit` actions |
-| `JoeSandboxResubmit` | `false` | Submit again when an analysis for the same email already exists |
-| `JoeSandboxAnalysisJobTimeout` | `30` | Maximum minutes to wait for a completed analysis |
-| `JoeSandboxPollIntervalSeconds` | `30` | Delay between submission-status checks |
-| `JoeSandboxAPIMaxRetry` | `5` | Joe Sandbox API retry count |
-| `JoeSandboxAPIRetryTimeout` | `5` | Joe Sandbox API timeout in minutes |
-| `MicrosoftRetryCount` | `3` | Microsoft Graph retry count |
-| `MicrosoftRetryDelaySeconds` | `60` | Default retry delay in seconds |
-| `MicrosoftHttpTimeoutSeconds` | `120` | Timeout for each Graph request in seconds |
+| Setting | Default | Range / values | Description |
+| --- | --- | --- | --- |
+| `AlertPollingIntervalInMinutes` | `10` | `5`, `10`, `15`, `20`, `30`, `60` | Interval between connector runs; stored as the `Polling` CRON application setting |
+| `InitialLookbackMinutes` | `60` | 1–43200 | Alert history checked on the first run |
+| `AlertOverlapMinutes` | `15` | 0–1440 | Overlap applied to the saved polling watermark so late-arriving alerts are not missed |
+| `AlertSeverities` | `informational,low,medium,high` | `unknown`, `informational`, `low`, `medium`, `high` | Comma-separated alert severities to process |
+| `IncidentTagsEnabled` | `true` | `true` / `false` | Add verdict and threat-name tags to related incidents |
+| `IncidentCommentsEnabled` | `true` | `true` / `false` | Add the analysis result to related incidents with comment deduplication |
+| `IndicatorImportEnabled` | `true` | `true` / `false` | Create Defender indicators from malicious Joe Sandbox IOCs |
+| `IndicatorVerdicts` | `malicious,suspicious` | `malicious,suspicious`, `malicious`, `suspicious` | Analysis verdicts eligible for indicator creation |
+| `IndicatorLifetimeDays` | `30` | 1–3650 | Number of days before created indicators expire |
+| `MaliciousNetworkAction` | `Block` | `Allowed`, `Audit`, `Block`, `BlockAndRemediate`, `Warn` | Action for URL, domain, and IP indicators from malicious analyses |
+| `SuspiciousNetworkAction` | `Audit` | same as above | Action for URL, domain, and IP indicators from suspicious analyses |
+| `MaliciousFileAction` | `Block` | same as above | Action for file-hash indicators from malicious analyses |
+| `SuspiciousFileAction` | `Audit` | same as above | Action for file-hash indicators from suspicious analyses |
+| `IndicatorAlertsEnabled` | `false` | `true` / `false` | Generate matching alerts; automatically treated as `true` for `Audit` actions |
+| `JoeSandboxResubmit` | `false` | `true` / `false` | Submit again when an analysis for the same email already exists |
+| `JoeSandboxAnalysisJobTimeout` | `30` | 1–55 | Maximum minutes to wait for a completed analysis in one run; unfinished submissions are picked up by the next run |
+| `JoeSandboxPollIntervalSeconds` | `30` | 5–300 | Delay between submission-status checks |
+| `JoeSandboxAPIMaxRetry` | `5` | 1–10 | Joe Sandbox API retry count |
+| `JoeSandboxAPIRequestTimeoutSeconds` | `60` | 5–600 | Timeout for each Joe Sandbox API request in seconds |
+| `MicrosoftRetryCount` | `3` | 0–10 | Microsoft Graph and Defender API retry count |
+| `MicrosoftRetryDelaySeconds` | `60` | 1–600 | Default retry delay in seconds |
+| `MicrosoftHttpTimeoutSeconds` | `120` | 5–600 | Timeout for each Microsoft API request in seconds |
+| `FunctionPackageUri` | release package URL | HTTPS URI | Deployment ZIP installed into the Function App; change only to deploy a custom build |
 
-The Premium template additionally supports `FunctionAppPlanSku` (`EP1`, `EP2`, or `EP3`) and `StorageAccountType` (`Standard_LRS`, `Standard_GRS`, or `Standard_RAGRS`).
+The Premium template additionally supports `functionAppPlanSku` (`EP1`, `EP2`, or `EP3`) and `storageAccountType` (`Standard_LRS`, `Standard_GRS`, or `Standard_RAGRS`).
+
+The following application settings are not exposed in the templates. Add them
+manually under **Environment variables** only when the defaults need to change:
+
+| Setting | Default | Range | Description |
+| --- | --- | --- | --- |
+| `FailedAlertMaxAttempts` | `2` | 1–20 | Attempts before the connector gives up on an alert or Defender enrichment that keeps failing |
+| `PendingSubmissionTTLHours` | `24` | 1–720 | Hours a pending submission or deferred alert is retried before the connector gives up |
+
+`JoeSandboxAPIRetryTimeout` from earlier releases is no longer used; the
+connector logs a warning if it is set. Replace it with
+`JoeSandboxAPIRequestTimeoutSeconds` (note the unit change from minutes to seconds).
 
 ## Behavior notes
 
